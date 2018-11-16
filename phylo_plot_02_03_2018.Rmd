@@ -1,0 +1,206 @@
+---
+title: "Plotting a phylogeny in ![Caption](rcran.png)"
+author: "[Sébastien Renaut](https://qcbs.ca/resources/research-professionals/research-professional-sebastien-renaut-phd/), 2018"
+output:
+  html_document:
+    toc: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE,fig.width=7, fig.height=7)
+```
+
+###1.Introduction
+Phylogenetic trees are one the basic tools used in a large number of evolutionary, ecological or molecular studies. In principle, they can be used to depict relationships (distance) among any kind of objects, but more usually among taxa or other biological entities (individuals, species, family, orders). In addition, having a phylogenetic tree is a necessery step in a number of analyses such as trait evolution[^1], diversification rates[^2] or molecular dating[^3].
+
+Given their ubiquitous presence in evolutionary biology, a number of methodological approaches exist to build them (e.g. Maximum Likelihood, Neighbour Joining, Bayesian), and represent them (e.g. Figtree[^4], MEGA[^5]). Here, I will provide a few examples on how to use R to draw and manipulate them, using two common R packages (phytools[^6],also check the phytools blog[^7], and ape[^8]). I will purposefully not present any data manipulation using Hadley Wickham's ggplot2[^9] package, given that the methodology and syntax used in the tidyverse[^10] are quite different from the base R[^11] (whether it is "better" is another topic and a matter of opinion I think). Also note that this post was done entirely using Rmarkdown[^12] and knitr[^13], fun tools to create html, pdf, or even Word documents.
+
+I use this as a very brief introduction (and certainly non exhaustive) to plotting phylogenies in R, which I hope you will modify to fit your own datasets. In the future, I'd like to expand on this topic. Comments, questions, things you'd like to see done are welcomed!
+
+###2.Basic plots
+```{r basics,fig.width=4.5,fig.height=4.5,fig.show='hold',message=FALSE}
+#Libraries
+library(ape)
+library(phytools)
+
+#Dataset examples
+data(bird.orders)
+
+#Set up margins
+par(mar = c(2,2,2,2))
+
+#Slightly better than default plot
+phylo = plot.phylo(bird.orders, edge.width = 1, label.offset = 1,cex = 0.4, main = "Figure 1 (basic)")
+
+#Dropping a group (tip) altogether
+bird.orders_nopass = drop.tip(bird.orders,"Passeriformes")
+plot.phylo(bird.orders_nopass, edge.width = 1, label.offset = 1,cex = 0.4, main = "Figure 2 (dropped tip)")
+
+#Dropping several tips
+#First, make a backbone of interest dropping some tips
+bird.orders.backbone =(drop.tip(bird.orders, c(1:5,9:12), subtree = TRUE))
+
+#adjust branch length (this is hard to implement...)
+bird.orders.backbone$edge.length[c(1,9)] = c(28,24.4)
+
+##Create a translation table
+trans<-data.frame(c("[5_tips]","[4_tips]"),c("Clade A","Clade B"),c(5,4),c(24,20))
+colnames(trans) = c("tip.label","clade.label","N","depth")
+
+#Create a object of classs "backbonePhylo" and plot with phytools 
+bird.orders.backbone2=phylo.toBackbone(bird.orders.backbone,trans)
+plot(bird.orders.backbone2, edge.width = 1, label.offset = 1,cex = 0.4,main = "Figure 3 (dropped tips)")
+
+
+#bird.orders.drops =(drop.tip(bird.orders, c(9:12), subtree = TRUE))
+#bird.orders.drops$tip.label[bird.orders.drops$tip.label=="[4_tips]"] = "clade A (4 tips)"
+#plot.phylo(bird.orders.drops, edge.width = 1, label.offset = 1,cex = 0.4, main = "Figure 3 (dropped tips)")
+
+#Unrooted tree
+plot.phylo(bird.orders,type="unrooted", edge.width = 1, label.offset = 2,cex= 0.4, main = "Figure 4 (unrooted)")
+```
+
+###3.Slightly more complex (colours)
+```{r more}
+
+#Set up new plotting region
+plot.new()
+plot.window(xlim = phylo$x.lim,ylim = phylo$y.lim)
+
+#Three colors vector (red, blue, purple in hexadecimal, with last two digits as the transparency)
+colors = c("#FF000060","#0000ff60","#551a8b60")
+
+#Add rectangles
+rect(phylo$x.lim[1],0.5,phylo$x.lim[2],5.5,col = colors[1],border = F) #group 1
+rect(phylo$x.lim[1],6.5,phylo$x.lim[2],12.5,col = colors[2], border = F) #group 2
+rect(phylo$x.lim[1],13.5,phylo$x.lim[2],23.5, col = colors[3],border = F) #group 3
+
+#Add phylo
+par(new = T)
+plot.phylo(bird.orders, edge.width = 2, label.offset = 1, main = "Figure 5 (colouring)")
+
+#Add a x axis that looks decent
+axis(1,at =seq(from =0, to = phylo$x.lim[2], by = 2),cex.axis = 0.5)
+
+#It looks good, save it with dev.print if you want
+#dev.print(dev = pdf, "phylo_more.pdf");dev.off()
+```
+
+###4.Multiple plots combined in layout
+```{r layout}
+#Setup layout as a 3 X 3 matrix with 3 regions (region 1 for the phylo tree, 2 for a x/y scatter and 3 for legend)
+m = matrix(c(2,1,1,2,1,1,3,1,1), 3, 3, byrow = TRUE)
+layout(m)
+
+#Save plot.phylo parameters, without plotting yet
+phylo = plot.phylo(bird.orders, edge.width = 2, label.offset = 1, plot = F, cex = 1)
+
+#REGION 1: add boxes based on the y axis coordinates, the x-axis coord. are based on the phylogeny, and your groups of interest
+rect(phylo$x.lim[1],0.5,phylo$x.lim[2],5.5,col = colors[1],border = F) #group 1
+rect(phylo$x.lim[1],6.5,phylo$x.lim[2],12.5,col = colors[2], border = F) #group 2
+rect(phylo$x.lim[1],13.5,phylo$x.lim[2],23.5, col = colors[3],border = F) #group 3
+
+#Add phylogeny on top of rectangles
+par(new = T)
+phylo = plot.phylo(bird.orders, edge.width = 2, label.offset = 1, cex = 1, main = "Figure 6 (3 plots in layout)")
+
+#Add an x axis that looks decent
+axis(1,at =seq(from = 0, to = round(phylo$x.lim[2]), by = 2),cex.axis = 0.5)
+
+#Make the segment for Turniciformes dashed (find out the x/y coordinates of the segment, color it white, then dashed red on top)
+segments(1,6,28,6,col = "white", lwd = 4, lty = 1)
+segments(1,6,28,6,col = "black", lwd = 4, lty = 3)
+
+#REGION 2: set up some wider margins for region # 2 of layout
+par(mar = c(11,4,11,0))
+
+#Set up some fake data (say fake PCA data) for the 3 groups
+pca = cbind(c(rnorm(6,mean=0,sd =1), rnorm(7,mean=2,sd =0.5),rnorm(10,mean=3,sd =0.5)),c(rnorm(6,mean=0,sd =1), rnorm(7,mean=0,sd =0.3),rnorm(10,mean=3,sd =0.2)))
+rownames(pca) = bird.orders$tip.label
+
+#Colors scheme according to boxes in phylo tree (5 red,1 black, 6 blue, 1 black, 10 purple)
+colors_according_to_tree = c(rep(colors[1],5),"black",rep(colors[2],6),"black",rep(colors[3],10))
+
+#Add another x/y scatter plot in region # 2 of layout
+plot(pca,col = colors_according_to_tree,lwd =3,pch = 21, ylab = "random variable 1", xlab = "random variable 2")
+
+#REGION 3: reset margins and empty plot
+par(mar = c(5,4,4,2))
+plot(1, type="n", xlab="", ylab="", xlim=c(0, 1), ylim=c(0, 1),xaxt="n",yaxt= "n", bty = "n")
+
+#Add a legend here
+legend(0.1,1.5,legend = c("group1","group2","group3"),fill = colors,xpd = T, cex = 2)
+
+#It looks good, save it with dev.print if you want
+#dev.print(dev = pdf, "phylo_layout.pdf"); dev.off()
+```
+
+
+###5.Adding coloured trait values
+```{r traits}
+###Add a trait value to the tree and plot it (trait object is based on the 3 colored grouping I did above)
+trait1 = c(sample(c(0:25),6),c(sample(25:75,6)),sample(c(75:100),11))
+names(trait1) = bird.orders$tip.label
+
+#Use contMap from phytools
+tree.trait <- contMap(bird.orders, trait1, plot = F)
+tree.trait<-setMap(tree.trait, colors=c("darkgreen","darkorange","blue"))
+
+#Carefull, we now plot using the plotting tool from phytools
+plot.contMap(tree.trait,type = "phylogram",legend = 0.4*max(nodeHeights(bird.orders)), fsize = c(0.9, 0.7), lwd=3,mar = c(3,4,3,2))
+
+#Add a title manually to plot.contMap
+title("Figure 7 (adding branch colors according to trait 1)",xpd = T)
+```
+
+###6.Adding pie charts + tip colors
+```{r pies}
+#Add node labels (pie charts could be based on a genetic structuring analysis, or another trait value)
+#You need a matrix defining your pies that can be generated as such:
+pies = matrix(0,nrow =bird.orders$Nnode,ncol=2)
+for(i in 1:bird.orders$Nnode) {x = sample(seq(0,1,by = 0.001),1); pies[i,] = c(x,1-x)}
+
+#Plot
+plot.contMap(tree.trait, type = "phylogram", legend = 0.4*max(nodeHeights(bird.orders)), fsize = c(0.9, 0.7), lwd=3, edge.width = 2, offset = 1,mar = c(2,4,3,2))
+nodelabels(pie = pies, piecol = c("green","yellow"), cex = 0.6)
+
+###Add tip labels colors based on trait1, but it could be on something entirely different.
+tip.labels.col = c(rep(colors[1],6),"black",rep(colors[2],6),"black",rep(colors[3],10))
+tiplabels(pch=15, cex=1.2, col= tip.labels.col,offset = 0.7)
+
+#Add a title manually to plot.contMap
+title("Figure 8 (adding pies)")
+```
+
+###7.Adding a map
+```{r USA map, message=FALSE}
+#Matrix of random USA GPS coordinates 
+mat = matrix(c(sample(seq(from = 32, to = 45, by = 0.001),23),sample(seq(from = -120, to = -84, by = 0.001),23)),nrow = 23,ncol =2)
+rownames(mat) = bird.orders$tip.label
+
+###World mapping function (Here we are using a USA map, but this can be changes with the database option)
+phylo.to.map(bird.orders,coords = mat, database = "usa")
+
+#Add a title manually to plot.contMap
+title("Figure 9 (USA map)",line = -3)
+```
+
+
+
+
+###8.References
+[^1]: Werner, G. D., Cornwell, W. K., Sprent, J. I., Kattge, J., & Kiers, E. T. (2014). A single evolutionary innovation drives the deep evolution of symbiotic N 2-fixation in angiosperms. Nature Communications, 5, 4087.
+[^2]: Fiz-Palacios, Omar, Harald Schneider, Jochen Heinrichs, and Vincent Savolainen. "Diversification of land plants: insights from a family-level phylogenetic analysis." BMC evolutionary biology 11, no. 1 (2011): 341.
+[^3]: Christin, P. A., Spriggs, E., Osborne, C. P., Strömberg, C. A., Salamin, N., & Edwards, E. J. (2014). Molecular dating, evolutionary rates, and the age of the grasses. Systematic biology, 63(2), 153-165.
+[^4]: Rambaut, A. (2007). FigTree, a graphical viewer of phylogenetic trees. See http://tree. bio. ed. ac. uk/software/figtree.
+[^5]: Kumar, S., Stecher, G., & Tamura, K. (2016). MEGA7: molecular evolutionary genetics analysis version 7.0 for bigger datasets. Molecular biology and evolution, 33(7), 1870-1874.
+[^6]: Revell, L. J. (2012) phytools: An R package for phylogenetic comparative biology (and other things). Methods Ecol. Evol., 3, 217-223.
+[^7]: Revell, L. J. Phytools blog. http://blog.phytools.org/
+[^8]: Paradis, E. (2012) Analysis of Phylogenetics and Evolution with R (Second Edition). New York: Springer.
+[^9]: Wickham, Hadley. ggplot2: elegant graphics for data analysis. Springer, 2016.
+[^10]: Wickham, Hadley, and Garrett Grolemund. R for data science: import, tidy, transform, visualize, and model data. " O'Reilly Media, Inc.", 2016.
+[^11]: R Core Team (2017). R: A language and environment for statistical computing. R
+  Foundation for Statistical Computing, Vienna, Austria. URL
+  https://www.R-project.org/.
+[^12]: Aumer, B., Cetinkaya-Rundel, M., Bray, A., Loi, L., & Horton, N. J. (2014). R Markdown: Integrating a reproducible analysis tool into introductory statistics. arXiv preprint arXiv:1402.1894. 
+[^13]: Xie, Yihui. "knitr: A general-purpose package for dynamic report generation in R." R package version 1.7 (2013): 1.
